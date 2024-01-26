@@ -1,18 +1,10 @@
-from flask import Flask, jsonify
-import yt_dlp
 import requests
 from bs4 import BeautifulSoup
 import json
 import re
 
-app = Flask(__name__)
-
-# Common utility functions
-
 def clean_str(s):
     return json.loads('{"text": "' + s + '"}')['text']
-
-# Facebook functions
 
 def get_hd_link(content):
     regex_rate_limit = r'browser_native_hd_url":"([^"]+)"'
@@ -44,7 +36,7 @@ def fetch_thumbnail(url):
 
     return json.dumps({'error': 'Failed to retrieve thumbnail'})
 
-def fetch_facebook_video_info(url):
+def fetch_video_info(url):
     headers = {
         'sec-fetch-user': '?1',
         'sec-ch-ua-mobile': '?0',
@@ -64,69 +56,25 @@ def fetch_facebook_video_info(url):
         response = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
         response.raise_for_status()
 
-        title = get_title(response.text)
-        thumbnail_value = fetch_thumbnail(url)
-        video_url = get_hd_link(response.text)
-        video_url = video_url+ '&dl=1'
+        msg = {'success': True}
+        msg['title'] = get_title(response.text)
+        msg['thumbnail'] = fetch_thumbnail(url)
 
-        return {'success': True,'title': title,'thumbnail': thumbnail_value,'video_url': video_url, }
+        hd_link = get_hd_link(response.text)
+
+        if hd_link:
+            msg['video_url'] = hd_link + '&dl=1'
+        else:
+            msg['video_url'] = None
 
     except requests.exceptions.RequestException as e:
         msg = {'success': False, 'message': str(e)}
 
-# End of Facebook functions
+    return json.dumps(msg)
 
-# YouTube functions
+def facebook_extractor(url):
+    return fetch_video_info(url)
 
-def get_video_info(url):
-    ydl_opts = {
-        'format': 'best',
-    }
-
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
-            info_dict = ydl.extract_info(url, download=False)
-
-            title = info_dict.get('title')
-            thumbnail_value = info_dict.get('thumbnail')
-            video_url = info_dict.get('url')
-           
-            return {'success': True,'title': title,'thumbnail': thumbnail_value,'video_url': video_url, }
-
-        except yt_dlp.utils.DownloadError as e:
-            return {'success': False, 'error_message': str(e)}
-
-# End of YouTube functions
-
-# Flask routes
-
-# Flask routes
-
-@app.route('/<path:video_url>', methods=['GET'])
-def get_video_info_endpoint(video_url):
-    
-    if video_url.lower() == 'favicon.ico':
-        # Handle favicon.ico request (return an empty response or your favicon)
-        return ''
-
-    if video_url.startswith('videos/'):
-        return jsonify({'success': False, 'error_message': 'Invalid video URL'})
-
-    if 'facebook.com' in video_url or 'fb.watch' in video_url:
-        result = fetch_facebook_video_info(video_url)
-    else:
-        result = get_video_info(video_url)
-
-    response_data = {
-            'success': True,
-            'title': result['title'],
-            'thumbnail': result['thumbnail'],
-            'video_url': result['video_url']
-        }
-
-    return jsonify(response_data)
-
-# Run the Flask app
-
-if __name__ == '__main__':
-    app.run(debug=True)
+# Example usage for fetching video information
+video_info_result = facebook_extractor("https://www.facebook.com/reel/1108744950305974")
+print(video_info_result)
